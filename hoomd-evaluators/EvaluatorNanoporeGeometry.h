@@ -66,7 +66,7 @@ class EvaluatorNanoporeGeometry
         //! Declares additional virial cotribututions are needed for the external field
         /*! No contribution
         */
-        DEVICE static bool requestFieldVirialTerm() { return false; }
+        DEVICE static bool requestFieldVirialTerm() { return true; }
 
         //! Evaluate the force, energy and virial
         /*! \param F force vector
@@ -204,9 +204,14 @@ class EvaluatorNanoporeGeometry
                 }
 
 
+            
 
-
-
+            virial[0] = F.x*m_pos.x;
+            virial[1] = F.x*m_pos.y;
+            virial[2] = F.x*m_pos.z;
+            virial[3] = F.y*m_pos.y;
+            virial[4] = F.y*m_pos.z;
+            virial[5] = F.z*m_pos.z;   
             }
 
 

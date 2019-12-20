@@ -2,7 +2,6 @@
 // This file is part of the HOOMD-blue project, released under the BSD 3-Clause License.
 
 
-// Maintainer: jglaser
 
 #ifndef __EVALUATOR_NANOPORE_EFIELD_H__
 #define __EVALUATOR_NANOPORE_EFIELD_H__
@@ -47,16 +46,16 @@ class EvaluatorNanoporeEfield
             {
             }
 
-        //! External Periodic doesn't need diameters
+        
         DEVICE static bool needsDiameter() { return false; }
         //! Accept the optional diameter value
         /*! \param di Diameter of particle i
         */
         DEVICE void setDiameter(Scalar di) { }
 
-        //! External Periodic doesn't need charges
+       
         DEVICE static bool needsCharge() { return true; }
-        //! Accept the optional diameter value
+
         /*! \param qi Charge of particle i
         */
         DEVICE void setCharge(Scalar qi) { m_qi = qi; }
@@ -64,7 +63,7 @@ class EvaluatorNanoporeEfield
         //! Declares additional virial cotribututions are needed for the external field
         /*! No contribution
         */
-        DEVICE static bool requestFieldVirialTerm() { return false; }
+        DEVICE static bool requestFieldVirialTerm() { return true; }
 
         //! Evaluate the force, energy and virial
         /*! \param F force vector
@@ -89,7 +88,6 @@ class EvaluatorNanoporeEfield
             Scalar c = m_field.z;
 
           
-            Scalar u_e;
             Scalar mu,nu,phi;
             Scalar rho,d1,d2;
             Scalar3 E;
@@ -123,15 +121,21 @@ class EvaluatorNanoporeEfield
 
             F = m_qi*E;
 
-            phi_el = (V0/pi)*atan(sinh(mu));
+            Scalar phi_el = (V0/pi)*atan(sinh(mu));
             energy = -m_qi*phi_el;
+
+            virial[0] = F.x*m_pos.x;
+            virial[1] = F.x*m_pos.y;
+            virial[2] = F.x*m_pos.z;
+            virial[3] = F.y*m_pos.y;
+            virial[4] = F.y*m_pos.z;
+            virial[5] = F.z*m_pos.z;
       
             }
 
         #ifndef NVCC
         //! Get the name of this potential
-        /*! \returns The potential name. Must be short and all lowercase, as this is the name energies will be logged as
-            via analyze.log.
+        /*! \returns The potential name. Short and all lowercase.
         */
         static std::string getName()
             {
@@ -143,10 +147,10 @@ class EvaluatorNanoporeEfield
         Scalar3 m_pos;                //!< particle position
         BoxDim m_box;                 //!< box dimensions
         Scalar m_qi;                  //!< particle charge
-        Scalar3 m_field;              //!< the field vector
-        Scalar cx;
-        Scalar cy;
-        Scalar cz;
+        Scalar3 m_field;              //!< contains V0,a,c
+        Scalar cx;                    //!< x position of the pore center
+        Scalar cy;                    //!< y position of the pore center
+        Scalar cz;                    //!< z position of the pore center
    };
 
 
