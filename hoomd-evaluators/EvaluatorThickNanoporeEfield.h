@@ -3,8 +3,8 @@
 
 
 
-#ifndef __EVALUATOR_NANOPORE_EFIELD_H__
-#define __EVALUATOR_NANOPORE_EFIELD_H__
+#ifndef __EVALUATOR_THICK_NANOPORE_EFIELD_H__
+#define __EVALUATOR_THICK_NANOPORE_EFIELD_H__
 
 #ifndef NVCC
 #include <string>
@@ -25,13 +25,13 @@
 
 //! Class for evaluating the analytic electric field through a nanopore
 
-class EvaluatorNanoporeEfield
+class EvaluatorThickNanoporeEfield
     {
     public:
 
         //! type of parameters this external potential accepts
        //!typedef struct param{} param_type;
-        typedef Scalar3 param_type;
+        typedef Scalar4 param_type;
         typedef Scalar3 field_type;
 
         //! Constructs the constraint evaluator
@@ -39,9 +39,9 @@ class EvaluatorNanoporeEfield
             \param box box dimensions
             \param params per-type parameters of external potential
         */
-        DEVICE EvaluatorNanoporeEfield(Scalar3 X, const BoxDim& box, const param_type& params, const field_type& field)
+        DEVICE EvaluatorThickNanoporeEfield(Scalar3 X, const BoxDim& box, const param_type& params, const field_type& field)
             : m_pos(X),
-              m_box(box), p_center_pos(field), f_params(params)
+              m_box(box),p_center_pos(field), f_params(params)
             {
             }
 
@@ -76,71 +76,70 @@ class EvaluatorNanoporeEfield
             // a,c are the radii of the ellipse in oblate spheroidal coordinates
             // for a circular pore a = c
             // V0 = effective voltage drop
-            Scalar pi = M_PI;
+            double pi = M_PI;
 
-            Scalar rx = m_pos.x - p_center_pos.x;
-            Scalar ry = m_pos.y - p_center_pos.y;
-            Scalar rz = m_pos.z - p_center_pos.z;
+            double rx =(double) m_pos.x - p_center_pos.x;
+            double ry =(double) m_pos.y - p_center_pos.y;
+            double rz =(double) m_pos.z - p_center_pos.z;
 
-            Scalar V0 = f_params.x;
-            Scalar a =  f_params.y;
-            Scalar c =  f_params.z;
+            double V0 = (double) f_params.x;
+            double a = (double)  f_params.y;
+            double c = (double) f_params.z;
+            double htp = (double) f_params.w/2.0;
+
+            double sgn_z = rz/abs(rz);
 
           
-            Scalar mu,nu,phi;
-            Scalar rho,d1,d2;
-            Scalar pref;
-            Scalar factor;
-            Scalar rescale_coeff;
+            double mu,nu,phi;
+            double rho,d1,d2;
+            double pref;
+            double factor;
+            double Vpart;
+            double rescale_coeff;
 
             Scalar3 E;
 
             E.x = E.y =E.z = Scalar(0);
 
-            rho=fast::sqrt(rx*rx + ry*ry);
-            d1=fast::sqrt( (rho+c)*(rho+c) + rz*rz);
-            d2=fast::sqrt( (rho-c)*(rho-c) + rz*rz);
+            rho=sqrt(rx*rx + ry*ry);
+
+            if (abs(rz) > htp){
+
+                
+                d1=sqrt( (rho+c)*(rho+c) + (rz-sgn_z*htp)*(rz-sgn_z*htp));
+                d2=sqrt( (rho-c)*(rho-c) + (rz-sgn_z*htp)*(rz-sgn_z*htp));
 
 
-            mu=fabs(acosh( (d1+d2)/(2*c)));
-            nu=fast::acos((d1-d2)/(2*c));
+                mu=fabs(acosh( (d1+d2)/(2*c)));
+                nu=acos((d1-d2)/(2*c));
 
-            phi=atan2(ry,rx);
+                phi=atan2(ry,rx);
 
+                Vpart = V0 / (2.0 + 4*htp/(pi*a));
 
-            rescale_coeff = pi*a*cosh(mu)*fast::sqrt( sinh(mu)*sinh(mu) + fast::sin(nu)*fast::sin(nu) );
-            
-            factor=V0/rescale_coeff;
-            
-            // this automatically computer the inverse square root
-            pref= fast::rsqrt( sinh(mu)*sinh(mu) + fast::sin(nu)*fast::sin(nu) );
-            if(rz<0){
-                  E.x=Scalar(-factor*pref*sinh(mu)*fast::cos(nu)*fast::cos(phi));
-                  E.y=Scalar(-factor*pref*sinh(mu)*fast::cos(nu)*fast::sin(phi));
-            }else{
-                  E.x=Scalar(factor*pref*sinh(mu)*fast::cos(nu)*fast::cos(phi));
-                  E.y=Scalar(factor*pref*sinh(mu)*fast::cos(nu)*fast::sin(phi));
+                rescale_coeff = pi*a*cosh(mu)*sqrt( sinh(mu)*sinh(mu) + sin(nu)*sin(nu) );
+                factor=2*Vpart/rescale_coeff;
+
+                pref=(double) 1.0/sqrt( sinh(mu)*sinh(mu) + sin(nu)*sin(nu) );
+                
+                E.x=Scalar(sgn_z*factor*pref*sinh(mu)*cos(nu)*cos(phi));
+                E.y=Scalar(sgn_z*factor*pref*sinh(mu)*cos(nu)*sin(phi));
+                E.z=Scalar(factor*pref*cosh(mu)*sin(nu));
+            } else if (abs(rz) <= htp) {
+
+                Vpart = V0 / (1.0 + pi*a/(2*htp));
+                E.x = E.y = Scalar(0);
+                E.z = Scalar(Vpart/(2*htp));
+
             }
-            E.z=Scalar(factor*pref*cosh(mu)*fast::sin(nu));
             
-            if (isnan(E.x)) {
-                E.x = Scalar(0.0);
-            }
             
-            if (isnan(E.y)) {
-                E.y = Scalar(0.0);
-            }
-
-            if (isnan(E.z)) {
-                E.z = Scalar(0.0);
-            }
-
-
-
+        
             F.x = m_qi*E.x;
             F.y = m_qi*E.y;
             F.z = m_qi*E.z;
             
+
 
       
             }
@@ -151,7 +150,7 @@ class EvaluatorNanoporeEfield
         */
         static std::string getName()
             {
-            return std::string("np_efield");
+            return std::string("thick_np_efield");
             }
         #endif
 
@@ -159,10 +158,8 @@ class EvaluatorNanoporeEfield
         Scalar3 m_pos;                //!< particle position
         BoxDim m_box;                 //!< box dimensions
         Scalar m_qi;                  //!< particle charge
-        Scalar3 p_center_pos;         //!< contains position of pore center
-        Scalar3 f_params;             //!< contains V0,a,c
-        
-
+        Scalar3 p_center_pos;         //!< contains x,y,z position of the pore center
+        Scalar4 f_params;             //!< contains V0,a,c,t_p
    };
 
 

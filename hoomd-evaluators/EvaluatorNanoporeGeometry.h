@@ -66,7 +66,7 @@ class EvaluatorNanoporeGeometry
         //! Declares additional virial cotribututions are needed for the external field
         /*! No contribution
         */
-        DEVICE static bool requestFieldVirialTerm() { return true; }
+        DEVICE static bool requestFieldVirialTerm() { return false; }
 
         //! Evaluate the force, energy and virial
         /*! \param F force vector
@@ -75,143 +75,116 @@ class EvaluatorNanoporeGeometry
         */
         DEVICE void evalForceEnergyAndVirial(Scalar3& F, Scalar& energy, Scalar* virial)
             {
-
-
+            
+            // WCA Cutoff 2^(1/6)
+            
+            Scalar r_cut = 1.12246204831;
+            
             Scalar cx = m_pos.x - m_field.x;
             Scalar cy = m_pos.y - m_field.y;
             Scalar cz = m_pos.z - m_field.z;
-            // Scalar r = sqrt(cx*cx + cy*cy +cz*cz);
-            Scalar rxy = sqrt(cx*cx + cy*cy);
+            
+            Scalar half_tpore = tpore*0.5;
+            Scalar zmax = half_tpore + r_cut;
 
 
+            Scalar sgn_cz = cz/abs(cz);
 
-            // WCA parameters
-
-
-            Scalar rtop ;
-            Scalar rbot ;
-
-            Scalar rtop2;
-            Scalar rbot2;
-
-            Scalar rtop2inv;
-            Scalar rbot2inv;
-
-            Scalar WCAforcemag = Scalar(0.0);
-
-            // WCA Cutoff
-            Scalar rcut = 1.12246204831;
-
-            // Inter-pore parameters
-            Scalar theta;
-            Scalar htpore = tpore*0.5;
-            Scalar zmax = htpore + rcut;
-            Scalar rxy2 = (rxy-rpore)*(rxy-rpore);
-            Scalar rxy2inv = Scalar(1.0)/rxy2;
-            Scalar rxy6inv = rxy2inv * rxy2inv * rxy2inv;
-            Scalar phi;
-            Scalar R2inv;
-            Scalar R6inv;
-            Scalar Fmag;
-            Scalar R2;
-
-
-
-
-            // Force initialization
-            F.x = 0;
-            F.y = 0;
-            F.z = 0;
-            Scalar Ftheta;
-
-            if (rxy <= rpore-rcut){
-                F.x = 0;
-                F.y = 0;
-                F.z = 0;
-
-
-
-            } else if (abs(cz) >= zmax ){
-                    F.x = 0;
-                    F.y = 0;
-                    F.z = 0;
-                    } else if (rxy >= rpore && abs(cz) >= htpore) {
-
-                    if (cz > 0) {
-                        rtop = cz - (htpore);
-                        rtop2 =rtop*rtop;
-                        rtop2inv = Scalar(1.0)/rtop2;
-                        Scalar rtop6inv= rtop2inv*rtop2inv*rtop2inv;
-                        WCAforcemag = rtop*rtop2inv * rtop6inv * (Scalar(12.0)*lj1*rtop6inv - Scalar(6.0)*lj2);
-                        //pair_eng = (r6inv * (lj1*r6inv - lj2) + epsilon);
-                        F.x = F.y = 0;
-                        F.z = WCAforcemag;
-                        // F.z = 0;
-                    // }
-                    } else {
-                        rbot = cz + (htpore);
-                        rbot2 =rbot*rbot;
-                        rbot2inv = Scalar(1.0)/rbot2;
-                        Scalar rbot6inv= rbot2inv*rbot2inv*rbot2inv;
-                        WCAforcemag = rbot*rbot2inv * rbot6inv * (Scalar(12.0)*lj1*rbot6inv - Scalar(6.0)*lj2);
-                        //pair_eng = (r6inv * (lj1*r6inv - lj2) + epsilon);
-                        F.x = F.y = 0;
-                        F.z =  WCAforcemag;
-                        // F.z = 0;
-                    }
-
-                } else if (abs(cz) <= htpore  && rxy > rpore - rcut){
-                        theta = atan2(cy,cx);
-
-                         Ftheta = (rxy-rpore)*rxy2inv * rxy6inv * (Scalar(12.0)*lj1*rxy6inv - Scalar(6.0)*lj2);
-                         F.z = 0 ;
-                         F.x = Ftheta*cos(theta);
-                         F.y = Ftheta*sin(theta);
-
-
-
-                } else if (abs(cz) >= htpore && rxy > rpore -rcut) {
-
-                theta = atan2(cy,cx);
-                Scalar rxycorner = sqrt((cx-rpore*cos(theta))*(cx-rpore*cos(theta)) + (cy-rpore*sin(theta))*(cy-rpore*sin(theta)));
-                R2 = (rxycorner)*(rxycorner) + ((abs(cz)-htpore))*((abs(cz)-htpore));
-                //Scalar theta2 = acos(((cz-tpore))/sqrt(R2));
-
-                    if (R2 <= rcut*rcut){
-                        R2inv = Scalar(1.0)/R2;
-                        R6inv = R2inv*R2inv*R2inv;
-                        Fmag  = sqrt(R2)*R2inv * R6inv * (Scalar(12.0)*lj1*R6inv - Scalar(6.0)*lj2);
-
-
-
-                        if (cz >= 0) {
-                            phi = atan2(cz - htpore,rxycorner);
-                            F.x = -Fmag*cos(phi)*cos(theta);
-                            F.y = -Fmag*sin(theta)*cos(phi);
-                            F.z = Fmag*sin(phi);
-                        } else {
-                            phi = atan2(cz + htpore,rxycorner);
-                            F.x = -Fmag*cos(phi)*cos(theta);
-                            F.y = -Fmag*sin(theta)*cos(phi);
-                            F.z = Fmag*sin(phi);
-
-                        }
-
-                    } else { F.x = F.y= F.z= 0 ;}
-
-
-
-                }
-
-
+            Scalar dz= sgn_cz * (abs(cz)-half_tpore);
+            Scalar dr;
             
 
-            virial[0] = F.x*m_pos.x;
-            virial[1] = F.x*m_pos.y;
-            virial[2] = F.x*m_pos.z;
-            virial[3] = F.y*m_pos.y;
-            virial[4] = F.y*m_pos.z;
-            virial[5] = F.z*m_pos.z;   
+            // WCA force init
+            Scalar f_wca_interior = Scalar(0.0);
+            Scalar f_wca_exterior = Scalar(0.0);
+            Scalar f_wca_corner = Scalar(0.0);
+            Scalar dz7inv;
+            Scalar dz13inv;
+
+            Scalar dr7inv;
+            Scalar dr13inv;
+
+            Scalar drho7inv;
+            Scalar drho13inv;
+
+           
+            
+            
+            // inside the pore 
+            Scalar r_xy = fast::sqrt(cx*cx + cy*cy);
+            Scalar r_interior = rpore - r_cut;
+           
+
+            // corner of the pore
+            Scalar x_corner;
+            Scalar y_corner;
+            Scalar r_corner;
+            Scalar rho_corner;
+
+            Scalar phi;
+            Scalar theta_corner;
+
+            Scalar theta = atan2(cy,cx);
+            
+            x_corner = cx - rpore*fast::cos(theta);
+            y_corner = cy - rpore*fast::sin(theta);
+           
+            r_corner = fast::sqrt(x_corner*x_corner + y_corner*y_corner);
+            
+            rho_corner = fast::sqrt(x_corner*x_corner + y_corner*y_corner + dz*dz);
+
+            // Initialize forces
+            F.x = F.y = F.z =0;
+
+            if (r_xy<r_interior || abs(cz)>=zmax ){
+                F.x = F.y = F.z =0;
+            } else if (r_xy >= rpore && abs(cz)<zmax && abs(cz) >= half_tpore){
+
+                dz7inv = Scalar(1.0)/pow(dz,7);
+                dz13inv = Scalar(1.0)/pow(dz,13);
+                
+                f_wca_exterior = Scalar(12.0)*lj1*dz13inv - Scalar(6.0)*lj2*dz7inv;
+
+                F.x = F.y =0;
+                F.z = f_wca_exterior;
+            } else if (r_xy >= r_interior && abs(cz)<= half_tpore) {
+
+                
+                dr = r_xy - rpore;
+
+                dr7inv = Scalar(1.0)/pow(dr,7);
+                dr13inv = Scalar(1.0)/pow(dr,13);
+
+                f_wca_interior = Scalar(12.0)*lj1*dr13inv - Scalar(6.0)*lj2*dr7inv;
+
+
+                F.x = f_wca_interior*fast::cos(theta);
+                F.y = f_wca_interior*fast::sin(theta);
+                F.z = 0;
+            } else if (r_xy>r_interior && abs(cz)>half_tpore && rho_corner<=r_cut){
+                
+
+                theta_corner = atan2(y_corner,x_corner);
+                phi = atan2(dz,r_corner);
+                drho7inv = Scalar(1.0)/pow(rho_corner,7);
+                drho13inv = Scalar(1.0)/pow(rho_corner,13);
+
+                f_wca_corner = Scalar(12.0)*lj1*drho13inv - Scalar(6.0)*lj2*drho7inv;
+                
+                
+                F.x = f_wca_corner * fast::cos(theta_corner)*fast::cos(phi);
+                F.y = f_wca_corner * fast::sin(theta_corner)*fast::cos(phi);
+                F.z = f_wca_corner * fast::sin(phi);
+            } 
+
+
+
+        
+
+
+
+
+
             }
 
 

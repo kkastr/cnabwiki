@@ -2,6 +2,9 @@ import numpy as np
 import sys 
 import os
 
+
+#TODO add option to replace files with backups and re-do update
+
 def insert_modifications(filename,identifier_string_list,list_string_to_insert):
     lines_from_read_file = open(filename,"r").readlines()
     
@@ -42,8 +45,8 @@ if len(sys.argv[1])==0:
 
 cwd = os.getcwd() 
 
-evaluator_names =['NanoporeEfield','NanoporeGeometry']
-shortnames = ['np_efield','nanopore']
+evaluator_names =['NanoporeEfield','NanoporeGeometry','ThickNanoporeEfield']
+shortnames = ['np_efield','nanopore','thick_np_efield']
 
 for en in evaluator_names:
 
@@ -127,15 +130,16 @@ class {class_name}(_external_force):
         hoomd.context.current.system.addCompute(self.cpp_force, self.force_name);
 
         # setup the coefficient options
-        self.required_coeffs = ['cx', 'cy', 'cz'];
+        self.required_coeffs = ['V0', 'a', 'c']
 
         self.field_coeff = tuple(field)
 
     def process_coeff(self, coeff):
-        cx = coeff['cx']
-        cy = coeff['cy']
-        cz = coeff['cz']
-        return _hoomd.make_scalar3(cx,cy,cz)
+        V0 = coeff['V0']
+        a = coeff['a']
+        c = coeff['c']
+
+        return _hoomd.make_scalar3(V0, a, c)
     def process_field_coeff(self, field):
         return _hoomd.make_scalar3(field[0],field[1],field[2])
 """
@@ -216,3 +220,62 @@ if class_already_exists==0:
 else:
     pass
 print("Appending the python class for the nanopore to external.py... Done.")
+
+
+# nanopore electric field for pores with non vanishing thickness
+
+en = evaluator_names[2]
+fn = 'external.py'
+idx = evaluator_names.index(en)
+class_name = shortnames[idx]
+string_block = f"""
+class {class_name}(_external_force):
+
+    def __init__(self, field, name=""):
+        hoomd.util.print_status_line();
+
+        # initialize the base class
+        _external_force.__init__(self, name);
+
+        # create the c++ mirror class
+        if not hoomd.context.exec_conf.isCUDAEnabled():
+            self.cpp_force = _md.Potential{en}(hoomd.context.current.system_definition,self.name);
+        else:
+            self.cpp_force = _md.Potential{en}GPU(hoomd.context.current.system_definition,self.name);
+
+        hoomd.context.current.system.addCompute(self.cpp_force, self.force_name);
+
+        # setup the coefficient options
+        self.required_coeffs = ['V0', 'a', 'c', 'tpore']
+
+        self.field_coeff = tuple(field)
+
+    def process_coeff(self, coeff):
+        V0 = coeff['V0']
+        a = coeff['a']
+        c = coeff['c']
+        tpore = coeff['tpore']
+
+        return _hoomd.make_scalar4(V0, a, c, tpore)
+
+    #the field parameters are the center of the nanopore in x,y,z
+    def process_field_coeff(self, field):
+        return _hoomd.make_scalar3(field[0],field[1],field[2])
+"""
+
+print("Appending the python class for the thick nanopore electric field to external.py...")
+
+lines_from_read_file = open(fn ,"r").readlines()
+
+class_already_exists = 0
+for line in lines_from_read_file:
+    if line.startswith(f'class {class_name}(_external_force)'):
+        class_already_exists = 1
+    else:
+        pass
+if class_already_exists==0:
+    file_to_append = open(fn,"a")
+    file_to_append.write(string_block)
+else:
+    pass
+print("Appending the python class for the thick nanopore electric field to external.py... Done.")
