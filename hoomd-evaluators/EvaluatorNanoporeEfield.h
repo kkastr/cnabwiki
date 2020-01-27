@@ -123,6 +123,13 @@ class EvaluatorNanoporeEfield
             }
             E.z=Scalar(factor*pref*cosh(mu)*fast::sin(nu));
             
+            /*
+            Instead of using doubles (which causes slowdown), check if
+            the resulting field is NAN in any of the components.
+            This is done to avoid the weird issue caused by passing floats close to zero
+            through so many trig functions.
+            */ 
+
             if (isnan(E.x)) {
                 E.x = Scalar(0.0);
             }
