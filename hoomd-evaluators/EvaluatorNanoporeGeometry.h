@@ -45,16 +45,16 @@ class EvaluatorNanoporeGeometry
         DEVICE EvaluatorNanoporeGeometry(Scalar3 X, const BoxDim& box, const param_type& _params, const field_type& field)
             : m_pos(X),
               m_box(box),
-              m_field(field), lj1(_params.x), lj2(_params.y), rpore(_params.z), tpore(_params.w)
+              m_field(field), epsilon(_params.x), sigma(_params.y), rpore(_params.z), tpore(_params.w)
             {
             }
 
         //! External Periodic doesn't need diameters
-        DEVICE static bool needsDiameter() { return false; }
+        DEVICE static bool needsDiameter() { return true; }
         //! Accept the optional diameter value
         /*! \param di Diameter of particle i
         */
-        DEVICE void setDiameter(Scalar di) { }
+        DEVICE void setDiameter(Scalar di) { m_di = di; }
 
         //! External Periodic doesn't need charges
         DEVICE static bool needsCharge() { return false; }
@@ -77,12 +77,23 @@ class EvaluatorNanoporeGeometry
             {
             
             // WCA Cutoff 2^(1/6)
-            
+
+            Scalar lj1 = 4.0 * epsilon * pow(sigma, 12.0);
+            Scalar lj2 = 4.0 * epsilon * pow(sigma, 6.0);
+
             Scalar r_cut = 1.12246204831;
             
             Scalar cx = m_pos.x - m_field.x;
             Scalar cy = m_pos.y - m_field.y;
             Scalar cz = m_pos.z - m_field.z;
+
+            // the pore is effectively made up of many unit diameter particles
+            Scalar p_di = 1.0;
+            // slj calculation to account for different sizes of polymers
+            Scalar delta = (m_di+p_di)/Scalar(2.0) - Scalar(1.0);
+
+            r_cut = r_cut + delta;
+           
             
             Scalar half_tpore = tpore*0.5;
             Scalar zmax = half_tpore + r_cut;
@@ -90,7 +101,7 @@ class EvaluatorNanoporeGeometry
 
             Scalar sgn_cz = cz/abs(cz);
 
-            Scalar dz= sgn_cz * (abs(cz)-half_tpore);
+            Scalar dz;
             Scalar dr;
             
 
@@ -98,6 +109,8 @@ class EvaluatorNanoporeGeometry
             Scalar f_wca_interior = Scalar(0.0);
             Scalar f_wca_exterior = Scalar(0.0);
             Scalar f_wca_corner = Scalar(0.0);
+
+
             Scalar dz7inv;
             Scalar dz13inv;
 
@@ -111,7 +124,7 @@ class EvaluatorNanoporeGeometry
             
             
             // inside the pore 
-            Scalar r_xy = fast::sqrt(cx*cx + cy*cy);
+            Scalar r_xy = sqrt(cx*cx + cy*cy);
             Scalar r_interior = rpore - r_cut;
            
 
@@ -126,20 +139,22 @@ class EvaluatorNanoporeGeometry
 
             Scalar theta = atan2(cy,cx);
             
-            x_corner = cx - rpore*fast::cos(theta);
-            y_corner = cy - rpore*fast::sin(theta);
+            dz= sgn_cz * (abs(cz)-half_tpore);
+            x_corner = cx - rpore*cos(theta);
+            y_corner = cy - rpore*sin(theta);
            
-            r_corner = fast::sqrt(x_corner*x_corner + y_corner*y_corner);
+            r_corner = sqrt(x_corner*x_corner + y_corner*y_corner);
             
-            rho_corner = fast::sqrt(x_corner*x_corner + y_corner*y_corner + dz*dz);
+            rho_corner = sqrt(x_corner*x_corner + y_corner*y_corner + dz*dz);
 
             // Initialize forces
-            F.x = F.y = F.z =0;
+            F.x = F.y = F.z = Scalar(0);
 
             if (r_xy<r_interior || abs(cz)>=zmax ){
-                F.x = F.y = F.z =0;
+                F.x = F.y = F.z = Scalar(0);
             } else if (r_xy >= rpore && abs(cz)<zmax && abs(cz) >= half_tpore){
 
+                dz = dz - sgn_cz*delta ;
                 dz7inv = Scalar(1.0)/pow(dz,7);
                 dz13inv = Scalar(1.0)/pow(dz,13);
                 
@@ -150,7 +165,7 @@ class EvaluatorNanoporeGeometry
             } else if (r_xy >= r_interior && abs(cz)<= half_tpore) {
 
                 
-                dr = r_xy - rpore;
+                dr = r_xy - rpore + delta ;
 
                 dr7inv = Scalar(1.0)/pow(dr,7);
                 dr13inv = Scalar(1.0)/pow(dr,13);
@@ -158,27 +173,27 @@ class EvaluatorNanoporeGeometry
                 f_wca_interior = Scalar(12.0)*lj1*dr13inv - Scalar(6.0)*lj2*dr7inv;
 
 
-                F.x = f_wca_interior*fast::cos(theta);
-                F.y = f_wca_interior*fast::sin(theta);
+                F.x = f_wca_interior*cos(theta);
+                F.y = f_wca_interior*sin(theta);
                 F.z = 0;
             } else if (r_xy>r_interior && abs(cz)>half_tpore && rho_corner<=r_cut){
                 
 
                 theta_corner = atan2(y_corner,x_corner);
                 phi = atan2(dz,r_corner);
-                drho7inv = Scalar(1.0)/pow(rho_corner,7);
-                drho13inv = Scalar(1.0)/pow(rho_corner,13);
+                drho7inv = Scalar(1.0)/pow(rho_corner-delta,7);
+                drho13inv = Scalar(1.0)/pow(rho_corner-delta,13);
 
                 f_wca_corner = Scalar(12.0)*lj1*drho13inv - Scalar(6.0)*lj2*drho7inv;
                 
                 
-                F.x = f_wca_corner * fast::cos(theta_corner)*fast::cos(phi);
-                F.y = f_wca_corner * fast::sin(theta_corner)*fast::cos(phi);
-                F.z = f_wca_corner * fast::sin(phi);
+                F.x = f_wca_corner * cos(theta_corner)*cos(phi);
+                F.y = f_wca_corner * sin(theta_corner)*cos(phi);
+                F.z = f_wca_corner * sin(phi);
             } 
 
 
-
+            
         
 
 
@@ -202,10 +217,10 @@ class EvaluatorNanoporeGeometry
     protected:
         Scalar3 m_pos;                //!< particle position
         BoxDim m_box;                 //!< box dimensions
-        Scalar m_qi;                  //!< particle charge
+        Scalar m_di;                  //!< particle charge
         Scalar3 m_field;              //!< the field vector
-        Scalar lj1;                   //!< lj1 parameter extracted from the params passed to the constructor
-        Scalar lj2;                   //!< lj2 parameter extracted from the params passed to the constructor
+        Scalar epsilon;                   //!< lj1 parameter extracted from the params passed to the constructor
+        Scalar sigma;                   //!< lj2 parameter extracted from the params passed to the constructor
         Scalar rpore;                 //!< Radius of Pore
         Scalar tpore;                 //!< Thickness of Pore
    };

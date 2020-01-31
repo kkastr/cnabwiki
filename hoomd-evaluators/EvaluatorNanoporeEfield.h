@@ -82,6 +82,8 @@ class EvaluatorNanoporeEfield
             Scalar ry = m_pos.y - p_center_pos.y;
             Scalar rz = m_pos.z - p_center_pos.z;
 
+
+
             Scalar V0 = f_params.x;
             Scalar a =  f_params.y;
             Scalar c =  f_params.z;

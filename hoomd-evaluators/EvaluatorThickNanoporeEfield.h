@@ -76,6 +76,7 @@ class EvaluatorThickNanoporeEfield
             // a,c are the radii of the ellipse in oblate spheroidal coordinates
             // for a circular pore a = c
             // V0 = effective voltage drop
+
             double pi = M_PI;
 
             double rx =(double) m_pos.x - p_center_pos.x;
@@ -101,30 +102,30 @@ class EvaluatorThickNanoporeEfield
 
             E.x = E.y =E.z = Scalar(0);
 
-            rho=sqrt(rx*rx + ry*ry);
+            rho=fast::sqrt(rx*rx + ry*ry);
 
             if (abs(rz) > htp){
 
                 
-                d1=sqrt( (rho+c)*(rho+c) + (rz-sgn_z*htp)*(rz-sgn_z*htp));
-                d2=sqrt( (rho-c)*(rho-c) + (rz-sgn_z*htp)*(rz-sgn_z*htp));
+                d1=fast::sqrt( (rho+c)*(rho+c) + (rz-sgn_z*htp)*(rz-sgn_z*htp));
+                d2=fast::sqrt( (rho-c)*(rho-c) + (rz-sgn_z*htp)*(rz-sgn_z*htp));
 
 
                 mu=fabs(acosh( (d1+d2)/(2*c)));
-                nu=acos((d1-d2)/(2*c));
+                nu=fast::acos((d1-d2)/(2*c));
 
                 phi=atan2(ry,rx);
 
                 Vpart = V0 / (2.0 + 4*htp/(pi*a));
 
-                rescale_coeff = pi*a*cosh(mu)*sqrt( sinh(mu)*sinh(mu) + sin(nu)*sin(nu) );
+                rescale_coeff = pi*a*cosh(mu)*fast::sqrt( sinh(mu)*sinh(mu) + fast::sin(nu)*fast::sin(nu) );
                 factor=2*Vpart/rescale_coeff;
 
-                pref=(double) 1.0/sqrt( sinh(mu)*sinh(mu) + sin(nu)*sin(nu) );
+                pref= fast::rsqrt( sinh(mu)*sinh(mu) + fast::sin(nu)*fast::sin(nu) );
                 
-                E.x=Scalar(sgn_z*factor*pref*sinh(mu)*cos(nu)*cos(phi));
-                E.y=Scalar(sgn_z*factor*pref*sinh(mu)*cos(nu)*sin(phi));
-                E.z=Scalar(factor*pref*cosh(mu)*sin(nu));
+                E.x=Scalar(sgn_z*factor*pref*sinh(mu)*fast::cos(nu)*fast::cos(phi));
+                E.y=Scalar(sgn_z*factor*pref*sinh(mu)*fast::cos(nu)*fast::sin(phi));
+                E.z=Scalar(factor*pref*cosh(mu)*fast::sin(nu));
             } else if (abs(rz) <= htp) {
 
                 Vpart = V0 / (1.0 + pi*a/(2*htp));
@@ -133,6 +134,18 @@ class EvaluatorThickNanoporeEfield
 
             }
             
+            if (isnan(E.x)) {
+                E.x = Scalar(0.0);
+            }
+            
+            if (isnan(E.y)) {
+                E.y = Scalar(0.0);
+            }
+
+            if (isnan(E.z)) {
+                E.z = Scalar(0.0);
+            }
+
             
         
             F.x = m_qi*E.x;
